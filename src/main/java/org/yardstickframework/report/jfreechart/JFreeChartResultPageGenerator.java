@@ -19,6 +19,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
+import java.nio.file.Files;
 import java.text.NumberFormat;
 import java.text.ParseException;
 import java.util.ArrayList;
@@ -62,7 +63,7 @@ public class JFreeChartResultPageGenerator {
      * @param infoMap Map with additional plot info.
      */
     public static void generate(File inFolder, JFreeChartGraphPlotterArguments args,
-        Map<String, List<JFreeChartPlotInfo>> infoMap) {
+                                Map<String, List<JFreeChartPlotInfo>> infoMap, Map<String, JFreeChartGraphPlotter.Result> simpleRes) {
         for (File folder : folders(inFolder)) {
             Map<String, List<File>> files = files(folder.listFiles());
 
@@ -83,6 +84,9 @@ public class JFreeChartResultPageGenerator {
             }
 
             generateHtml(testTime, files, folder, args, infoMap);
+
+            if (simpleRes != null)
+                generateCsv(folder, simpleRes);
         }
     }
 
@@ -164,6 +168,19 @@ public class JFreeChartResultPageGenerator {
         return res;
     }
 
+    static void generateCsv(File outFolder,
+                                 Map<String, JFreeChartGraphPlotter.Result> simpleRes) {
+        File outFile = new File(outFolder, "results.csv");
+
+        try (BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(Files.newOutputStream(outFile.toPath())))) {
+            for (Map.Entry<String, JFreeChartGraphPlotter.Result> e : simpleRes.entrySet()) {
+                bw.write(String.format(Locale.US,"%s, %.2f, %.2f\n", e.getKey(), e.getValue().avgTp, e.getValue().avgLat));
+            };
+        }
+        catch (Exception e) {
+            errorHelp("Exception is raised during file processing: " + outFile.getAbsolutePath(), e);
+        }
+    }
     /**
      * @param testTime Test time.
      * @param fileMap Files.

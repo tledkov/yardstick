@@ -32,6 +32,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.jfree.chart.ChartFactory;
@@ -397,11 +398,11 @@ public class JFreeChartGraphPlotter {
                             List<PlotData> plotData = readData(file);
 
                             if (!plotData.isEmpty())
-                                processPlots(file.getParentFile(), Collections.singleton(plotData), infoMap, STANDARD);
+                                processPlots(file.getParentFile(), Collections.singleton(plotData), infoMap, STANDARD, null);
                         }
                     }
 
-                    JFreeChartResultPageGenerator.generate(f2, args, infoMap);
+                    JFreeChartResultPageGenerator.generate(f2, args, infoMap, null);
                 }
             }
         }
@@ -417,6 +418,7 @@ public class JFreeChartGraphPlotter {
     private static void processFilesPerProbe(Map<String, List<List<List<File>>>> res, File folderToWrite,
         JFreeChartGraphPlotterArguments args, JFreeChartGenerationMode mode) throws Exception {
         Map<String, List<JFreeChartPlotInfo>> infoMap = new HashMap<>();
+        Map<String, Result> simpleRes = new LinkedHashMap<>();
 
         for (Map.Entry<String, List<List<List<File>>>> entry : res.entrySet()) {
             Collection<List<PlotData>> plots = new ArrayList<>(entry.getValue().size());
@@ -482,11 +484,11 @@ public class JFreeChartGraphPlotter {
                 }
             }
 
-            processPlots(folderToWrite, plots, infoMap, mode);
+            processPlots(folderToWrite, plots, infoMap, mode, entry.getKey().contains("ThroughputLatency") ? simpleRes : null);
         }
 
         if (!infoMap.isEmpty())
-            JFreeChartResultPageGenerator.generate(folderToWrite, args, infoMap);
+            JFreeChartResultPageGenerator.generate(folderToWrite, args, infoMap, simpleRes);
     }
 
     /**
@@ -655,6 +657,16 @@ public class JFreeChartGraphPlotter {
         }
     }
 
+    static class Result {
+        Double avgTp;
+        Double avgLat;
+
+        public Result(Double avgTp, Double avgLat) {
+            this.avgTp = avgTp;
+            this.avgLat = avgLat;
+        }
+    }
+
     /**
      * @param folderToWrite Folder to write the resulted charts.
      * @param plots Collections of plots.
@@ -663,7 +675,8 @@ public class JFreeChartGraphPlotter {
      * @throws Exception If failed.
      */
     private static void processPlots(File folderToWrite, Collection<List<PlotData>> plots,
-        Map<String, List<JFreeChartPlotInfo>> infoMap, JFreeChartGenerationMode mode) throws Exception {
+        Map<String, List<JFreeChartPlotInfo>> infoMap, JFreeChartGenerationMode mode,
+         Map<String, Result> simpleRes) throws Exception {
         ChartRenderingInfo info = new ChartRenderingInfo(new StandardEntityCollection());
 
         XYLineAndShapeRenderer renderer = new XYLineAndShapeRenderer(true, false);
@@ -688,15 +701,30 @@ public class JFreeChartGraphPlotter {
                     continue;
 
                 PlotData plotData = plotData0.get(idx);
-
                 dataSet.addSeries(plotData.plotName() + "_" + cnt++, plotData.series().data);
 
                 xAxisLabel = plotData.xAxisLabel;
                 yAxisLabel = plotData.yAxisLabel;
                 plotName = plotData.plotName();
 
-                infoList.add(info(plotData.series(), mode));
+                JFreeChartPlotInfo info0 = info(plotData.series(), mode);
+                infoList.add(info0);
+
+                if (simpleRes != null) {
+                    simpleRes.merge(
+                        plotData.series.seriesName,
+                        new Result(
+                            idx == 0 ? info0.average() : null,
+                            idx == 1 ? info0.average() : null
+                        ),
+                        (oldR, newR) -> new Result(
+                            newR.avgTp != null ? newR.avgTp : oldR.avgTp,
+                            newR.avgLat != null ? newR.avgLat : oldR.avgLat
+                        )
+                    );
+                }
             }
+
 
             if (infoList.isEmpty())
                 break;
